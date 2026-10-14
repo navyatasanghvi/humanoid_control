@@ -1,8 +1,9 @@
-# unitree_sdk2
-Unitree robot sdk version 2.
+# G1 Humanoid Control
+Using unitree sdk version 2.
+Developing for G1 robot.
 
 ### Prebuild environment
-* OS  (Ubuntu 20.04 LTS)  
+* OS  (Ubuntu >= 20.04 LTS)  
 * CPU  (aarch64 and x86_64)   
 * Compiler  (gcc version 9.4.0) 
 
@@ -14,7 +15,7 @@ Before building or running the SDK, ensure the following dependencies are instal
 - GCC (version 9.4.0)
 - Make
 
-You can install the required packages on Ubuntu 20.04 with:
+You can install the required packages with:
 
 ```bash
 apt-get update
@@ -34,8 +35,6 @@ make
 
 ### Installation
 
-To build your own application with the SDK, you can install the unitree_sdk2 to your system directory:
-
 ```bash
 mkdir build
 cd build
@@ -43,7 +42,7 @@ cmake ..
 sudo make install
 ```
 
-Or install unitree_sdk2 to a specified directory:
+Or install to a specified directory:
 
 ```bash
 mkdir build
