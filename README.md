@@ -35,6 +35,8 @@ make
 
 ### Installation
 
+Install to system:
+
 ```bash
 mkdir build
 cd build
