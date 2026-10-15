@@ -440,8 +440,8 @@ class G1Example {
   ChannelSubscriberPtr<IMUState_> imutorso_subscriber_;
   ThreadPtr command_writer_ptr_, control_thread_ptr_, joyInput_thread_ptr_;
 
-  unitree::robot::g1::LocoClient loco_client_;
-  unitree::robot::g1::AudioClient sound_client_;
+  // unitree::robot::g1::LocoClient loco_client_;
+  // unitree::robot::g1::AudioClient sound_client_;
 
   int control_steps_;
   bool motor_sequence_active_;
@@ -463,13 +463,13 @@ class G1Example {
     suppress_sound_(true),
     ow_active_(false),
     motor_sequence_active_(false),
-    reset_sequence_active_(false),
-    joystick_device_("/dev/input/by-id/usb-Sony_Computer_Entertainment_Wireless_Controller-event-joystick") {
+    reset_sequence_active_(false) {
     
 
     ChannelFactory::Instance()->Init(0, networkInterface);
 
     // Mute robot
+    unitree::robot::g1::AudioClient sound_client_;
     sound_client_.Init();
     sound_client_.SetTimeout(10.0f);
     int32_t ret = sound_client_.SetVolume(0);
@@ -477,6 +477,7 @@ class G1Example {
     sleep(3);
 
     // Ready for Walk Mode
+    unitree::robot::g1::LocoClient loco_client_;
     loco_client_.Init();
     loco_client_.SetTimeout(10.f);
     loco_client_.ZeroTorque();
@@ -511,8 +512,10 @@ class G1Example {
 
     // create threads
     command_writer_ptr_ = CreateRecurrentThreadEx("command_writer", UT_CPU_ID_NONE, 2000, &G1Example::LowCommandWriter, this);
-    control_thread_ptr_ = CreateRecurrentThreadEx("control", UT_CPU_ID_NONE, 2000, &G1Example::Control, this);
+    control_thread_ptr_ = CreateRecurrentThreadEx("control", UT_CPU_ID_NONE, 2000, std::bind(&G1Example::Control, this, &loco_client_));
     joyInput_thread_ptr_ = CreateRecurrentThreadEx("joystick_reader", UT_CPU_ID_NONE, 2000, &G1Example::joyInputReader, this); 
+    
+    joystick_device_ = "/dev/input/by-id/usb-Sony_Computer_Entertainment_Wireless_Controller-event-joystick";
     joystick_open_ = open(joystick_device_, O_RDONLY);
     
 
@@ -549,17 +552,19 @@ class G1Example {
     // }
 
     
-    // hi5();
+    hi5();
     
-    // time_ = 0;
-    // reset_sequence_active_ = true;
-    // sleep(7);
+    time_ = 0;
+    reset_sequence_active_ = true;
+    sleep(7);
 
     namaste();
 
     time_ = 0;
     reset_sequence_active_ = true;
     sleep(7);
+
+    while (true) sleep(10);
 
     close(joystick_open_);
 
@@ -659,7 +664,7 @@ class G1Example {
 
   const std::shared_ptr<const MotorCommand> mc = motor_command_buffer_.GetData();
   if (mc) {
-    dds_low_command.motor_cmd().at(29).q(0.75); // for arm_sdk
+    dds_low_command.motor_cmd().at(29).q(0.6); // for arm_sdk
     for (size_t i = 0; i < G1_NUM_MOTOR; i++) {
     if(excludeLowerBody_ && i < firstUpperBodyJoint_){ continue; }
     dds_low_command.motor_cmd().at(i).mode() = 1;  // 1:Enable, 0:Disable
@@ -675,12 +680,15 @@ class G1Example {
   }
   }
 
-  void Control() {
+  void Control(unitree::robot::g1::LocoClient* loco_client) {
     if(joystick_state_.emergency_stop.load()){
-      loco_client_.Damp();
+      loco_client->Damp(); 
+      return;
     }
     if(joystick_state_.reset_to_zero.load()){
       reset_sequence_active_ = true;
+      motor_sequence_active_ = false;
+      reset_motor_controls();
       joystick_state_.reset_to_zero.store(false);
     }
 
@@ -867,18 +875,5 @@ int main(int argc, char const *argv[]) {
   }
   std::string networkInterface = argv[1];
   G1Example custom(networkInterface);
-  while (true) sleep(10);
-  // while(motorIndex_ == -1){
-  //   get_input_motor_index();
-  //   // std::cout << "motor index: " << motorIndex_ << std::endl;
-  //   if(motorIndex_ == -1){
-  //     time_ = 0;
-  //     sleep(3);
-  //   }
-  //   while(motorIndex_ != -1){
-  //     get_input_more_or_less();
-  //     sleep(1);
-  //   }
-  // }
   return 0;
 }
