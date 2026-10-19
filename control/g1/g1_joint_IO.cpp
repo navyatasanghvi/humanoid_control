@@ -305,6 +305,7 @@ std::unordered_map<int, float> gainQMap({{0, 0.05},
                     {28, 0.5}});
 std::unordered_map<int, float> targetQMap;
 std::unordered_map<int, float> resetTargetQMap;
+std::unordered_map<int, float> poseTargetQMap;
 std::unordered_map<int, float> targetQTolerance;
 std::unordered_map<int, std::array<float,3>> motorControlSpecs; // multiplier, qDelta, duration
 
@@ -450,6 +451,7 @@ class G1Example {
   int control_steps_;
   bool motor_sequence_active_;
   bool reset_sequence_active_;
+  bool pose_sequence_active_;
   joyInputState joystick_state_;
   int joystick_open_;
   const char* joystick_device_;
@@ -467,7 +469,8 @@ class G1Example {
     suppress_sound_(true),
     ow_active_(false),
     motor_sequence_active_(false),
-    reset_sequence_active_(false) {
+    reset_sequence_active_(false),
+    pose_sequence_active_(false) {
     
 
     ChannelFactory::Instance()->Init(0, networkInterface);
@@ -556,13 +559,31 @@ class G1Example {
     // }
 
     
-    hi5();
+    // hi5();
     
-    time_ = 0;
-    reset_sequence_active_ = true;
-    sleep(7);
+    // time_ = 0;
+    // reset_sequence_active_ = true;
+    // sleep(7);
 
-    namaste();
+    // namaste();
+
+    // time_ = 0;
+    // reset_sequence_active_ = true;
+    // sleep(7);
+
+    readStateFromFile("high-five");
+    pose_sequence_active_ = true;
+    while(pose_sequence_active_){
+      sleep(1);
+    }
+    sleep(5);
+
+    readStateFromFile("namaste");
+    pose_sequence_active_ = true;
+    while(pose_sequence_active_){
+      sleep(1);
+    }
+    sleep(5);
 
     time_ = 0;
     reset_sequence_active_ = true;
@@ -711,46 +732,46 @@ class G1Example {
       time_ += control_dt_;
       control_steps_ += 1;
       if (reset_sequence_active_) {
-      // [Stage 1 / RESET]: set robot to zero posture
-      bool motor_change_flag = false;
-      for (int i = 0; i < G1_NUM_MOTOR; ++i) {
-        if(abs(resetTargetQMap[i] - targetQMap[i]) > 0.01){
-        int multiplier = (resetTargetQMap[i] < targetQMap[i]) ? (-1) : 1;
-        targetQMap[i] += multiplier*gainQMap[i]*motorControlSpecs[i][1];
-        targetQMap[i] = std::clamp(targetQMap[i], minQMap[i], maxQMap[i]);
-        targetQTolerance[i] = abs(ms->q.at(i) - targetQMap[i]);
-        motor_command_tmp.q_target.at(i) = targetQMap[i];
-        motor_change_flag = true;
+        // [Stage 1 / RESET]: set robot to zero posture
+        bool motor_change_flag = false;
+        for (int i = 0; i < G1_NUM_MOTOR; ++i) {
+          if(excludeLowerBody_ && i < firstUpperBodyJoint_){ continue; }
+          if(abs(resetTargetQMap[i] - ms->q.at(i)) > 0.02){
+            int multiplier = (resetTargetQMap[i] < ms->q.at(i)) ? (-1) : 1;
+            targetQMap[i] += multiplier*gainQMap[i]*motorControlSpecs[i][1];
+            targetQMap[i] = std::clamp(targetQMap[i], minQMap[i], maxQMap[i]);
+            targetQTolerance[i] = abs(ms->q.at(i) - targetQMap[i]);
+            motor_command_tmp.q_target.at(i) = targetQMap[i];
+            motor_change_flag = true;
+          }
         }
-        // double ratio = std::clamp(time_ / duration_, 0.0, 1.0);
-        // targetQMap[i] = (1.0-ratio)*targetQMap[i] + ratio*resetTargetQMap[i];
-        // targetQMap[i] = std::clamp(targetQMap[i], minQMap[i], maxQMap[i]);
-        // targetQTolerance[i] = abs(ms->q.at(i) - targetQMap[i]);
-        // motor_command_tmp.q_target.at(i) = targetQMap[i];
-      }
-      if(!motor_change_flag){ reset_sequence_active_ = false; }
+        if(!motor_change_flag){ reset_sequence_active_ = false; }
       } else if(motor_sequence_active_){
-      for(int i = 0; i < G1_NUM_MOTOR; i++){
-        if(motorControlSpecs[i][2] > 0) {
-        motorControlSpecs[i][2] -= control_dt_;
-        targetQMap[i] += gainQMap[i]*motorControlSpecs[i][0]*motorControlSpecs[i][1];
-        targetQMap[i] = std::clamp(targetQMap[i], minQMap[i], maxQMap[i]);
-        targetQTolerance[i] = abs(ms->q.at(i) - targetQMap[i]);
-        motor_command_tmp.q_target.at(i) = targetQMap[i];
+        for(int i = 0; i < G1_NUM_MOTOR; i++){
+          if(motorControlSpecs[i][2] > 0) {
+            motorControlSpecs[i][2] -= control_dt_;
+            targetQMap[i] += gainQMap[i]*motorControlSpecs[i][0]*motorControlSpecs[i][1];
+            targetQMap[i] = std::clamp(targetQMap[i], minQMap[i], maxQMap[i]);
+            targetQTolerance[i] = abs(ms->q.at(i) - targetQMap[i]);
+            motor_command_tmp.q_target.at(i) = targetQMap[i];
+          }
+        }   
+      }
+      else if(pose_sequence_active_){ 
+        bool motor_change_flag = false;
+        for (int i = 0; i < G1_NUM_MOTOR; ++i) { 
+          if(excludeLowerBody_ && i < firstUpperBodyJoint_){ continue; }
+          if(abs(poseTargetQMap[i] - ms->q.at(i)) > 0.02){
+            int multiplier = (poseTargetQMap[i] < ms->q.at(i)) ? (-1) : 1;
+            targetQMap[i] += multiplier*gainQMap[i]*motorControlSpecs[i][1];
+            targetQMap[i] = std::clamp(targetQMap[i], minQMap[i], maxQMap[i]);
+            targetQTolerance[i] = abs(ms->q.at(i) - targetQMap[i]);
+            motor_command_tmp.q_target.at(i) = targetQMap[i];
+            motor_change_flag = true;
+            std::cout << i << ' ' << abs(poseTargetQMap[i] - ms->q.at(i)) << ' ' << targetQMap[i] << '\n'; 
+          }
         }
-      }   
-      }
-      else if(control_steps_%500 == 0){
-      ow_active_ = false;
-      for (int i = 0; i < G1_NUM_MOTOR; ++i) {
-        // std::cout << targetQTolerance[i] << ' ' << abs(ms->q.at(i) - targetQMap[i]) << '\n';
-        if(abs(ms->q.at(i) - targetQMap[i]) > 10*targetQTolerance[i]){
-        ow_active_ = true;
-        }
-      }
-      }
-      else{
-      ow_active_ = false;
+        if(!motor_change_flag){ pose_sequence_active_ = false; }
       }
       motor_command_buffer_.SetData(motor_command_tmp);
     }
@@ -858,6 +879,19 @@ class G1Example {
     }
     std::ofstream fout(outfile_name);
     fout << pose;
+  }
+
+  void readStateFromFile(std::string name){
+    std::string outfile_name = POSE_LIB_DIR + name + ".yaml";
+    YAML::Node pose = YAML::LoadFile(outfile_name);
+    
+    for(int i = 0; i < G1_NUM_MOTOR; i++){
+      if(excludeLowerBody_ && i < firstUpperBodyJoint_){ 
+        poseTargetQMap[i] = 0.0; 
+        continue;
+      }
+      poseTargetQMap[i] = pose["pose"][i].as<float>();
+    }
   }
 
   void joyInputReader() {
