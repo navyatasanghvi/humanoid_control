@@ -2,7 +2,8 @@ cmake_minimum_required(VERSION 3.5)
 project(unitree_sdk2 VERSION 2.0.0)
 
 ## Project Options
-option(BUILD_EXAMPLES "Build examples" ON)
+option(BUILD_EXAMPLES "Build examples" OFF)
+option(BUILD_CONTROL "Build control" ON)
 
 ## Set compiler to use c++ 17 features
 set(CMAKE_CXX_STANDARD 17)
@@ -58,6 +59,10 @@ target_include_directories(unitree_sdk2 INTERFACE
 
 if (BUILD_EXAMPLES)
     add_subdirectory(example)
+endif ()
+
+if (BUILD_CONTROL)
+    add_subdirectory(control)
 endif ()
 
 ## Install the library
