@@ -559,13 +559,13 @@ class G1Example {
     // }
 
     
-    // hi5();
+    // hi5("high-five", true);
     
     // time_ = 0;
     // reset_sequence_active_ = true;
     // sleep(7);
 
-    // namaste();
+    // namaste("namaste", true);
 
     // time_ = 0;
     // reset_sequence_active_ = true;
@@ -798,7 +798,7 @@ class G1Example {
 
   }
 
-  void hi5(){
+  void hi5(std::string name="high-five", bool write_to_file=false){
     reset_motor_controls();
     motorControlSpecs[22][0] = -1; motorControlSpecs[22][2] = 9;
     motorControlSpecs[23][0] = -1; motorControlSpecs[23][2] = 8;
@@ -806,7 +806,7 @@ class G1Example {
     motorControlSpecs[28][0] = -1; motorControlSpecs[28][2] = 2;
     motor_sequence_active_ = true;
     sleep(20);
-    writeStateToFile("high-five");
+    if(write_to_file){ writeStateToFile(name); }
     sleep(5);
     reset_motor_controls();
     // motorIndex_ = 22;
@@ -826,7 +826,7 @@ class G1Example {
     // sleep(7);
   }
 
-  void namaste(){
+  void namaste(std::string name="namaste", bool write_to_file=false){
     reset_motor_controls();
     motorControlSpecs[15][0] = -1; motorControlSpecs[15][2] = 7;
     motorControlSpecs[22][0] = -1; motorControlSpecs[22][2] = 7;
@@ -846,7 +846,7 @@ class G1Example {
 
     motor_sequence_active_ = true;
     sleep(20);
-    writeStateToFile("namaste");
+    if(write_to_file){ writeStateToFile(name); }
     sleep(5);
     reset_motor_controls();
     // motorIndex_ = 22;
