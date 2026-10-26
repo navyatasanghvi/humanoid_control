@@ -303,6 +303,126 @@ std::unordered_map<int, float> gainQMap({{0, 0.05},
                     {26, 0.5},
                     {27, 0.5},
                     {28, 0.5}});
+std::unordered_map<int, int> symMotorMap({{0, 6},
+                    {1, 7},
+                    {2, 8},
+                    {3, 9},
+                    {4, 10},
+                    {5, 11},
+                    {6, 0},
+                    {7, 1},
+                    {8, 2},
+                    {9, 3},
+                    {10, 4},
+                    {11, 5},
+                    {12, -1},
+                    {13, -1},
+                    {14, -1},
+                    {15, 22},
+                    {16, 23},
+                    {17, 24},
+                    {18, 25},
+                    {19, 26},
+                    {20, 27},
+                    {21, 28},
+                    {22, 15},
+                    {23, 16},
+                    {24, 17},
+                    {25, 18},
+                    {26, 19},
+                    {27, 20},
+                    {28, 21}});
+
+std::unordered_map<int, float> symMultMap({{0, 1.0},
+                    {1, -1.0},
+                    {2, -1.0},
+                    {3, 1.0},
+                    {4, 1.0},
+                    {5, -1.0},
+                    {6, 1.0},
+                    {7, -1.0},
+                    {8, -1.0},
+                    {9, 1.0},
+                    {10, 1.0},
+                    {11, -1.0},
+                    {12, 0.0},
+                    {13, 0.0},
+                    {14, 0.0},
+                    {15, 1.0},
+                    {16, -1.0},
+                    {17, -1.0},
+                    {18, 1.0},
+                    {19, -1.0},
+                    {20, 1.0},
+                    {21, -1.0},
+                    {22, 1.0},
+                    {23, -1.0},
+                    {24, -1.0},
+                    {25, 1.0},
+                    {26, -1.0},
+                    {27, 1.0},
+                    {28, -1.0}});
+
+std::unordered_map<int, bool> isLeft({{0, true},
+                    {1, true},
+                    {2, true},
+                    {3, true},
+                    {4, true},
+                    {5, true},
+                    {6, false},
+                    {7, false},
+                    {8, false},
+                    {9, false},
+                    {10, false},
+                    {11, false},
+                    {12, false},
+                    {13, false},
+                    {14, false},
+                    {15, true},
+                    {16, true},
+                    {17, true},
+                    {18, true},
+                    {19, true},
+                    {20, true},
+                    {21, true},
+                    {22, false},
+                    {23, false},
+                    {24, false},
+                    {25, false},
+                    {26, false},
+                    {27, false},
+                    {28, false}});
+
+std::unordered_map<int, bool> isRight({{0, false},
+                    {1, false},
+                    {2, false},
+                    {3, false},
+                    {4, false},
+                    {5, false},
+                    {6, true},
+                    {7, true},
+                    {8, true},
+                    {9, true},
+                    {10, true},
+                    {11, true},
+                    {12, false},
+                    {13, false},
+                    {14, false},
+                    {15, false},
+                    {16, false},
+                    {17, false},
+                    {18, false},
+                    {19, false},
+                    {20, false},
+                    {21, false},
+                    {22, true},
+                    {23, true},
+                    {24, true},
+                    {25, true},
+                    {26, true},
+                    {27, true},
+                    {28, true}});
+
 std::unordered_map<int, float> targetQMap;
 std::unordered_map<int, float> resetTargetQMap;
 std::unordered_map<int, float> poseTargetQMap;
@@ -431,7 +551,6 @@ class G1Example {
   uint8_t mode_machine_;
   bool suppress_print_;
   bool suppress_sound_;
-  bool ow_active_;
 
   Gamepad gamepad_;
   REMOTE_DATA_RX rx_;
@@ -444,9 +563,6 @@ class G1Example {
   ChannelSubscriberPtr<LowState_> lowstate_subscriber_;
   ChannelSubscriberPtr<IMUState_> imutorso_subscriber_;
   ThreadPtr command_writer_ptr_, control_thread_ptr_, joyInput_thread_ptr_;
-
-  // unitree::robot::g1::LocoClient loco_client_;
-  // unitree::robot::g1::AudioClient sound_client_;
 
   int control_steps_;
   bool motor_sequence_active_;
@@ -467,7 +583,6 @@ class G1Example {
     mode_machine_(0),
     suppress_print_(true),
     suppress_sound_(true),
-    ow_active_(false),
     motor_sequence_active_(false),
     reset_sequence_active_(false),
     pose_sequence_active_(false) {
@@ -547,16 +662,6 @@ class G1Example {
     //   }
     // }
 
-    // while(true){
-    //   if(ow_active_){
-    //     std::cout << "Ouchie!\n";
-    //     if(!suppress_sound_){
-    //       ret = sound_client_.TtsMaker("ouchie!", 1);
-    //     }
-    //     ow_active_ = false;
-    //   }
-    //   sleep(2);
-    // }
 
     
     // hi5("high-five", true);
@@ -571,19 +676,61 @@ class G1Example {
     // reset_sequence_active_ = true;
     // sleep(7);
 
-    readStateFromFile("high-five");
+
+    sleep(2);
+    loco_client_.Damp();
+    
+    char entered1;
+    std::cout << "For recording symmetric goal, put robot's right arm into pose and enter Y. To do nothing, enter N.\n";  
+    std::cin >> entered1;
+    if(entered1 == 'y' || entered1 == 'Y'){
+      writeStateToFile("symmetric5", true, "right");
+    }
+    char entered2;
+    std::cout << "Move away from robot and enter O to continue.\n";
+    std::cin >> entered2;
+    if(entered2 == 'o' || entered2 == 'O'){
+      std::cout << "Moving on.\n";
+    }
+    else{
+      return;
+    }
+
+    sleep(1);
+    loco_client_.StandUp();
+    sleep(5);
+    loco_client_.SetFsmId(550510);
+    sleep(5);
+    loco_client_.SetFsmId(501);
+    sleep(5);
+    loco_client_.SetBalanceMode(0);
+    sleep(3);
+
+    time_ = 0;
+    reset_sequence_active_ = true;
+    sleep(7);
+
+    readStateFromFile("symmetric5");
     pose_sequence_active_ = true;
     while(pose_sequence_active_){
       sleep(1);
     }
     sleep(5);
 
-    readStateFromFile("namaste");
-    pose_sequence_active_ = true;
-    while(pose_sequence_active_){
-      sleep(1);
-    }
-    sleep(5);
+
+    // readStateFromFile("high-five");
+    // pose_sequence_active_ = true;
+    // while(pose_sequence_active_){
+    //   sleep(1);
+    // }
+    // sleep(5);
+
+    // readStateFromFile("namaste");
+    // pose_sequence_active_ = true;
+    // while(pose_sequence_active_){
+    //   sleep(1);
+    // }
+    // sleep(5);
 
     time_ = 0;
     reset_sequence_active_ = true;
@@ -739,7 +886,7 @@ class G1Example {
           if(abs(resetTargetQMap[i] - ms->q.at(i)) > 0.02){
             int multiplier = (resetTargetQMap[i] < ms->q.at(i)) ? (-1) : 1;
             targetQMap[i] += multiplier*gainQMap[i]*motorControlSpecs[i][1];
-            targetQMap[i] = std::clamp(targetQMap[i], minQMap[i], maxQMap[i]);
+            // targetQMap[i] = std::clamp(targetQMap[i], minQMap[i], maxQMap[i]);
             targetQTolerance[i] = abs(ms->q.at(i) - targetQMap[i]);
             motor_command_tmp.q_target.at(i) = targetQMap[i];
             motor_change_flag = true;
@@ -751,7 +898,7 @@ class G1Example {
           if(motorControlSpecs[i][2] > 0) {
             motorControlSpecs[i][2] -= control_dt_;
             targetQMap[i] += gainQMap[i]*motorControlSpecs[i][0]*motorControlSpecs[i][1];
-            targetQMap[i] = std::clamp(targetQMap[i], minQMap[i], maxQMap[i]);
+            // targetQMap[i] = std::clamp(targetQMap[i], minQMap[i], maxQMap[i]);
             targetQTolerance[i] = abs(ms->q.at(i) - targetQMap[i]);
             motor_command_tmp.q_target.at(i) = targetQMap[i];
           }
@@ -764,7 +911,7 @@ class G1Example {
           if(abs(poseTargetQMap[i] - ms->q.at(i)) > 0.02){
             int multiplier = (poseTargetQMap[i] < ms->q.at(i)) ? (-1) : 1;
             targetQMap[i] += multiplier*gainQMap[i]*motorControlSpecs[i][1];
-            targetQMap[i] = std::clamp(targetQMap[i], minQMap[i], maxQMap[i]);
+            // targetQMap[i] = std::clamp(targetQMap[i], minQMap[i], maxQMap[i]);
             targetQTolerance[i] = abs(ms->q.at(i) - targetQMap[i]);
             motor_command_tmp.q_target.at(i) = targetQMap[i];
             motor_change_flag = true;
@@ -866,13 +1013,29 @@ class G1Example {
     // sleep(7);
   }
 
-  void writeStateToFile(std::string name){
+  void writeStateToFile(std::string name, bool mirror=false, std::string side=""){
     YAML::Node pose;
     std::string outfile_name = POSE_LIB_DIR + name + ".yaml";
     const std::shared_ptr<const MotorState> ms = motor_state_buffer_.GetData();
     for(int i = 0; i < G1_NUM_MOTOR; i++){
       if(excludeLowerBody_ && i < firstUpperBodyJoint_){ continue; }
-      pose["pose"][i] = ms->q.at(i);
+      if(mirror){
+        if(side=="left"){
+          if(isLeft[i]){ pose["pose"][i] = ms->q.at(i); }
+          else{ pose["pose"][i] = symMultMap[i]*ms->q.at(symMotorMap[i]); }
+        }
+        else if(side=="right"){
+          if(isRight[i]){ pose["pose"][i] = ms->q.at(i); }
+          else{ pose["pose"][i] = symMultMap[i]*ms->q.at(symMotorMap[i]); }
+        }
+        else{ 
+          std::cout << "Bad side specifier: should be left or right!\n";
+          return;
+        }
+      }
+      else{ 
+        pose["pose"][i] = ms->q.at(i);
+      }
     }
     if (!std::filesystem::exists(POSE_LIB_DIR)) {
         std::filesystem::create_directories(POSE_LIB_DIR);
