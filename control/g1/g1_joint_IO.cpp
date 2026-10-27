@@ -147,6 +147,12 @@ struct joyInputState {
   std::atomic<bool> emergency_stop{false};
 };
 
+struct keyInputState {
+  std::atomic<bool> escape_press{false};
+  std::atomic<bool> space_press{false};
+  std::atomic<bool> enter_press{false};
+};
+
 inline uint32_t Crc32Core(uint32_t *ptr, uint32_t len) {
   uint32_t xbit = 0;
   uint32_t data = 0;
@@ -562,15 +568,19 @@ class G1Example {
   ChannelPublisherPtr<LowCmd_> lowcmd_publisher_;
   ChannelSubscriberPtr<LowState_> lowstate_subscriber_;
   ChannelSubscriberPtr<IMUState_> imutorso_subscriber_;
-  ThreadPtr command_writer_ptr_, control_thread_ptr_, joyInput_thread_ptr_;
+  ThreadPtr command_writer_ptr_, control_thread_ptr_, joyInput_thread_ptr_, keyInput_thread_ptr_;
 
   int control_steps_;
   bool motor_sequence_active_;
   bool reset_sequence_active_;
   bool pose_sequence_active_;
+  bool traj_sequence_active_;
   joyInputState joystick_state_;
   int joystick_open_;
   const char* joystick_device_;
+  keyInputState keyboard_state_;
+  int keyboard_open_;
+  const char* keyboard_device_;
 
  public:
   G1Example(std::string networkInterface)
@@ -585,7 +595,8 @@ class G1Example {
     suppress_sound_(true),
     motor_sequence_active_(false),
     reset_sequence_active_(false),
-    pose_sequence_active_(false) {
+    pose_sequence_active_(false),
+    traj_sequence_active_(false) {
     
 
     ChannelFactory::Instance()->Init(0, networkInterface);
@@ -636,9 +647,13 @@ class G1Example {
     command_writer_ptr_ = CreateRecurrentThreadEx("command_writer", UT_CPU_ID_NONE, 2000, &G1Example::LowCommandWriter, this);
     control_thread_ptr_ = CreateRecurrentThreadEx("control", UT_CPU_ID_NONE, 2000, std::bind(&G1Example::Control, this, &loco_client_));
     joyInput_thread_ptr_ = CreateRecurrentThreadEx("joystick_reader", UT_CPU_ID_NONE, 2000, &G1Example::joyInputReader, this); 
+    keyInput_thread_ptr_ = CreateRecurrentThreadEx("keyboard_reader", UT_CPU_ID_NONE, 2000, &G1Example::keyInputReader, this); 
     
     joystick_device_ = "/dev/input/by-id/usb-Sony_Computer_Entertainment_Wireless_Controller-event-joystick";
     joystick_open_ = open(joystick_device_, O_RDONLY);
+
+    keyboard_device_ = "/dev/input/by-id/usb-Logitech_USB_Receiver-if01-event-kbd";
+    keyboard_open_ = open(keyboard_device_, O_RDONLY);
     
 
     time_ = 0;
@@ -680,20 +695,28 @@ class G1Example {
     sleep(2);
     loco_client_.Damp();
     
+    // char entered1;
+    // std::cout << "Enter Y to record right arm pose as symmetric pose.\n";  
+    // std::cin >> entered1;
+    // if(entered1 == 'y' || entered1 == 'Y'){
+    //   writePoseToFile("namaste-symmetric", true, "right");
+    // }
+    // char entered2;
+    // std::cout << "Move away from robot and enter O to continue.\n";
+    // std::cin >> entered2;
+    // if(entered2 == 'o' || entered2 == 'O'){
+    //   std::cout << "Moving on.\n";
+    // }
+    // else{
+    //   return;
+    // }
+
     char entered1;
-    std::cout << "For recording symmetric goal, put robot's right arm into pose and enter Y. To do nothing, enter N.\n";  
+    std::cout << "Enter Y to start recording trajectory.\n";  
     std::cin >> entered1;
     if(entered1 == 'y' || entered1 == 'Y'){
-      writeStateToFile("symmetric5", true, "right");
-    }
-    char entered2;
-    std::cout << "Move away from robot and enter O to continue.\n";
-    std::cin >> entered2;
-    if(entered2 == 'o' || entered2 == 'O'){
-      std::cout << "Moving on.\n";
-    }
-    else{
-      return;
+      std::cout << "Press ESC to stop recording.\n";
+      writeTrajectoryToFile("trajectory4");
     }
 
     sleep(1);
@@ -710,23 +733,35 @@ class G1Example {
     reset_sequence_active_ = true;
     sleep(7);
 
-    readStateFromFile("symmetric5");
-    pose_sequence_active_ = true;
-    while(pose_sequence_active_){
+
+    followTrajectoryFromFile("trajectory4");
+    while(traj_sequence_active_){
       sleep(1);
     }
     sleep(5);
 
 
-    // readStateFromFile("high-five");
-    // pose_sequence_active_ = true;
+    
+
+    // followPoseFromFile("high-five");
     // while(pose_sequence_active_){
     //   sleep(1);
     // }
     // sleep(5);
 
-    // readStateFromFile("namaste");
-    // pose_sequence_active_ = true;
+    // followPoseFromFile("symmetric3");
+    // while(pose_sequence_active_){
+    //   sleep(1);
+    // }
+    // sleep(5);
+
+    // followPoseFromFile("symmetric5");
+    // while(pose_sequence_active_){
+    //   sleep(1);
+    // }
+    // sleep(5);
+
+    // followPoseFromFile("namaste");
     // while(pose_sequence_active_){
     //   sleep(1);
     // }
@@ -836,7 +871,7 @@ class G1Example {
 
   const std::shared_ptr<const MotorCommand> mc = motor_command_buffer_.GetData();
   if (mc) {
-    dds_low_command.motor_cmd().at(29).q(0.6); // for arm_sdk
+    dds_low_command.motor_cmd().at(29).q(0.4); // for arm_sdk
     for (size_t i = 0; i < G1_NUM_MOTOR; i++) {
     if(excludeLowerBody_ && i < firstUpperBodyJoint_){ continue; }
     dds_low_command.motor_cmd().at(i).mode() = 1;  // 1:Enable, 0:Disable
@@ -915,7 +950,7 @@ class G1Example {
             targetQTolerance[i] = abs(ms->q.at(i) - targetQMap[i]);
             motor_command_tmp.q_target.at(i) = targetQMap[i];
             motor_change_flag = true;
-            std::cout << i << ' ' << abs(poseTargetQMap[i] - ms->q.at(i)) << ' ' << targetQMap[i] << '\n'; 
+            // std::cout << i << ' ' << abs(poseTargetQMap[i] - ms->q.at(i)) << ' ' << targetQMap[i] << '\n'; 
           }
         }
         if(!motor_change_flag){ pose_sequence_active_ = false; }
@@ -953,7 +988,7 @@ class G1Example {
     motorControlSpecs[28][0] = -1; motorControlSpecs[28][2] = 2;
     motor_sequence_active_ = true;
     sleep(20);
-    if(write_to_file){ writeStateToFile(name); }
+    if(write_to_file){ writePoseToFile(name); }
     sleep(5);
     reset_motor_controls();
     // motorIndex_ = 22;
@@ -993,7 +1028,7 @@ class G1Example {
 
     motor_sequence_active_ = true;
     sleep(20);
-    if(write_to_file){ writeStateToFile(name); }
+    if(write_to_file){ writePoseToFile(name); }
     sleep(5);
     reset_motor_controls();
     // motorIndex_ = 22;
@@ -1013,19 +1048,46 @@ class G1Example {
     // sleep(7);
   }
 
-  void writeStateToFile(std::string name, bool mirror=false, std::string side=""){
+  void writeTrajectoryToFile(std::string name){
+    YAML::Node traj;
+    std::string outfile_name = POSE_LIB_DIR + name + ".yaml";
+    int pose_id = 0;
+    while(!keyboard_state_.escape_press.load()){
+      const std::shared_ptr<const MotorState> ms = motor_state_buffer_.GetData();
+      if(ms){
+        for(int i = 0; i < G1_NUM_MOTOR; i++){
+          if(excludeLowerBody_ && i < firstUpperBodyJoint_){ continue; }
+          traj["trajectory"][pose_id][i] = ms->q.at(i);
+        }
+        pose_id += 1;
+        std::cout << pose_id << '\n';
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    }
+    if (!std::filesystem::exists(POSE_LIB_DIR)) {
+        std::filesystem::create_directories(POSE_LIB_DIR);
+    }
+    std::ofstream fout(outfile_name);
+    fout << traj;
+
+    keyboard_state_.escape_press.store(false);
+  }
+
+  void writePoseToFile(std::string name, bool mirror=false, std::string side=""){
     YAML::Node pose;
     std::string outfile_name = POSE_LIB_DIR + name + ".yaml";
     const std::shared_ptr<const MotorState> ms = motor_state_buffer_.GetData();
+    if(!ms){ return; }
+
     for(int i = 0; i < G1_NUM_MOTOR; i++){
       if(excludeLowerBody_ && i < firstUpperBodyJoint_){ continue; }
       if(mirror){
         if(side=="left"){
-          if(isLeft[i]){ pose["pose"][i] = ms->q.at(i); }
+          if(isLeft[i] || (symMotorMap[i] == -1)){ pose["pose"][i] = ms->q.at(i); }
           else{ pose["pose"][i] = symMultMap[i]*ms->q.at(symMotorMap[i]); }
         }
         else if(side=="right"){
-          if(isRight[i]){ pose["pose"][i] = ms->q.at(i); }
+          if(isRight[i] || (symMotorMap[i] == -1)){ pose["pose"][i] = ms->q.at(i); }
           else{ pose["pose"][i] = symMultMap[i]*ms->q.at(symMotorMap[i]); }
         }
         else{ 
@@ -1044,7 +1106,7 @@ class G1Example {
     fout << pose;
   }
 
-  void readStateFromFile(std::string name){
+  void followPoseFromFile(std::string name){
     std::string outfile_name = POSE_LIB_DIR + name + ".yaml";
     YAML::Node pose = YAML::LoadFile(outfile_name);
     
@@ -1055,10 +1117,36 @@ class G1Example {
       }
       poseTargetQMap[i] = pose["pose"][i].as<float>();
     }
+    pose_sequence_active_ = true;
+  }
+
+  void followTrajectoryFromFile(std::string name){
+    std::string outfile_name = POSE_LIB_DIR + name + ".yaml";
+    YAML::Node traj = YAML::LoadFile(outfile_name);
+    int pose_id = -1;
+    traj_sequence_active_ = true;
+    while(!keyboard_state_.space_press.load())
+    {
+      if(!pose_sequence_active_){ 
+        pose_id += 1; 
+        if(traj["trajectory"].size() <= pose_id){ traj_sequence_active_ = false; return; }
+        for(int i = 0; i < G1_NUM_MOTOR; i++){
+          if(excludeLowerBody_ && i < firstUpperBodyJoint_){ 
+            poseTargetQMap[i] = 0.0; 
+            continue;
+          }
+          poseTargetQMap[i] = traj["trajectory"][pose_id][i].as<float>();
+        }
+        pose_sequence_active_ = true;
+        std::cout << traj["trajectory"].size() << ' ' << pose_id << '\n';
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    }
+    traj_sequence_active_ = false;
   }
 
   void joyInputReader() {
-    if (joystick_open_ == -1) { return; }
+    if (joystick_open_ == -1) { std::cout << "Joystick not open!\n"; return; }
     struct input_event ev;
     ssize_t bytesRead = read(joystick_open_, &ev, sizeof(struct input_event));
     // Ignore incomplete event packets
@@ -1080,6 +1168,32 @@ class G1Example {
           break;
         default:
           joystick_state_.emergency_stop.store(true);
+          break;
+      }
+    } 
+  }
+
+  void keyInputReader() {
+    if (keyboard_open_ == -1) { std::cout << "Keyboard not open!\n"; return; }
+    struct input_event ev;
+    ssize_t bytesRead = read(keyboard_open_, &ev, sizeof(struct input_event));
+    // Ignore incomplete event packets
+    if (bytesRead < (ssize_t)sizeof(struct input_event)) {
+      return; 
+    }
+    // Filter for button presses
+    if (ev.type == EV_KEY && ev.value == 1) {
+      switch(ev.code) {
+        case 1:
+          keyboard_state_.escape_press.store(true);
+          break;
+        case 57:
+          keyboard_state_.space_press.store(true);
+          break;
+        case 28:
+          keyboard_state_.enter_press.store(true);
+          break;
+        default:
           break;
       }
     } 
