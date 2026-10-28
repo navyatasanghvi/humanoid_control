@@ -433,6 +433,7 @@ std::unordered_map<int, float> targetQMap;
 std::unordered_map<int, float> resetTargetQMap;
 std::unordered_map<int, float> poseTargetQMap;
 std::unordered_map<int, float> targetQTolerance;
+std::unordered_map<int, float> oldMotorState;
 std::unordered_map<int, std::array<float,3>> motorControlSpecs; // multiplier, qDelta, duration
 
 int motorIndex_ = -1; 
@@ -692,14 +693,14 @@ class G1Example {
     // sleep(7);
 
 
-    sleep(2);
-    loco_client_.Damp();
+    // sleep(2);
+    // loco_client_.Damp();
     
     // char entered1;
-    // std::cout << "Enter Y to record right arm pose as symmetric pose.\n";  
+    // std::cout << "Enter Y to record arm pose.\n";  
     // std::cin >> entered1;
     // if(entered1 == 'y' || entered1 == 'Y'){
-    //   writePoseToFile("namaste-symmetric", true, "right");
+    //   writePoseToFile("arm_front", false, "");
     // }
     // char entered2;
     // std::cout << "Move away from robot and enter O to continue.\n";
@@ -711,36 +712,50 @@ class G1Example {
     //   return;
     // }
 
-    char entered1;
-    std::cout << "Enter Y to start recording trajectory.\n";  
-    std::cin >> entered1;
-    if(entered1 == 'y' || entered1 == 'Y'){
-      std::cout << "Press ESC to stop recording.\n";
-      writeTrajectoryToFile("trajectory4");
-    }
+    // char entered3;
+    // std::cout << "Enter Y to record arm pose.\n";  
+    // std::cin >> entered3;
+    // if(entered3 == 'y' || entered3 == 'Y'){
+    //   writePoseToFile("arm_back", false, "");
+    // }
+    // char entered4;
+    // std::cout << "Move away from robot and enter O to continue.\n";
+    // std::cin >> entered4;
+    // if(entered4 == 'o' || entered4 == 'O'){
+    //   std::cout << "Moving on.\n";
+    // }
+    // else{
+    //   return;
+    // }
 
-    sleep(1);
-    loco_client_.StandUp();
-    sleep(5);
-    loco_client_.SetFsmId(550510);
-    sleep(5);
-    loco_client_.SetFsmId(501);
-    sleep(5);
-    loco_client_.SetBalanceMode(0);
-    sleep(3);
+    // char entered1;
+    // std::cout << "Enter Y to start recording trajectory.\n";  
+    // std::cin >> entered1;
+    // if(entered1 == 'y' || entered1 == 'Y'){
+    //   std::cout << "Press ESC to stop recording.\n";
+    //   writeTrajectoryToFile("trajectory5");
+    // }
 
-    time_ = 0;
-    reset_sequence_active_ = true;
-    sleep(7);
+    // sleep(1);
+    // loco_client_.StandUp();
+    // sleep(5);
+    // loco_client_.SetFsmId(550510);
+    // sleep(5);
+    // loco_client_.SetFsmId(501);
+    // sleep(5);
+    // loco_client_.SetBalanceMode(0);
+    // sleep(3);
+
+    // time_ = 0;
+    // reset_sequence_active_ = true;
+    // sleep(7);
 
 
-    followTrajectoryFromFile("trajectory4");
+    followTrajectoryFromFile("trajectory5");
     while(traj_sequence_active_){
       sleep(1);
     }
     sleep(5);
-
-
     
 
     // followPoseFromFile("high-five");
@@ -762,6 +777,18 @@ class G1Example {
     // sleep(5);
 
     // followPoseFromFile("namaste");
+    // while(pose_sequence_active_){
+    //   sleep(1);
+    // }
+    // sleep(5);
+
+    // followPoseFromFile("arm_front");
+    // while(pose_sequence_active_){
+    //   sleep(1);
+    // }
+    // sleep(5);
+
+    // followPoseFromFile("arm_back");
     // while(pose_sequence_active_){
     //   sleep(1);
     // }
@@ -871,7 +898,7 @@ class G1Example {
 
   const std::shared_ptr<const MotorCommand> mc = motor_command_buffer_.GetData();
   if (mc) {
-    dds_low_command.motor_cmd().at(29).q(0.4); // for arm_sdk
+    dds_low_command.motor_cmd().at(29).q(0.6); // for arm_sdk
     for (size_t i = 0; i < G1_NUM_MOTOR; i++) {
     if(excludeLowerBody_ && i < firstUpperBodyJoint_){ continue; }
     dds_low_command.motor_cmd().at(i).mode() = 1;  // 1:Enable, 0:Disable
@@ -945,9 +972,20 @@ class G1Example {
           if(excludeLowerBody_ && i < firstUpperBodyJoint_){ continue; }
           if(abs(poseTargetQMap[i] - ms->q.at(i)) > 0.02){
             int multiplier = (poseTargetQMap[i] < ms->q.at(i)) ? (-1) : 1;
-            targetQMap[i] += multiplier*gainQMap[i]*motorControlSpecs[i][1];
+            float targetAddition_i = multiplier*gainQMap[i]*motorControlSpecs[i][1];
+            float ms_change = abs(oldMotorState[i] - ms->q.at(i));
+            targetQMap[i] += targetAddition_i;
             // targetQMap[i] = std::clamp(targetQMap[i], minQMap[i], maxQMap[i]);
-            targetQTolerance[i] = abs(ms->q.at(i) - targetQMap[i]);
+            float newQTolerance_i = abs(ms->q.at(i) - targetQMap[i]);
+            if(ms_change < 20*abs(targetAddition_i) 
+              && (abs(targetQTolerance[i] - newQTolerance_i) > 100*abs(targetAddition_i)))
+            {
+              std::cout << i << " motor id appears stuck! Resetting!\n";
+              reset_sequence_active_ = true;
+              pose_sequence_active_ = false;
+              break;
+            }
+            targetQTolerance[i] = newQTolerance_i;
             motor_command_tmp.q_target.at(i) = targetQMap[i];
             motor_change_flag = true;
             // std::cout << i << ' ' << abs(poseTargetQMap[i] - ms->q.at(i)) << ' ' << targetQMap[i] << '\n'; 
@@ -956,6 +994,7 @@ class G1Example {
         if(!motor_change_flag){ pose_sequence_active_ = false; }
       }
       motor_command_buffer_.SetData(motor_command_tmp);
+      for (int i = 0; i < G1_NUM_MOTOR; ++i) { oldMotorState[i] = ms->q.at(i); }
     }
   }
 
